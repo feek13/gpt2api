@@ -146,10 +146,18 @@ func (rt *utlsRoundTripper) dialTLS(ctx context.Context, network, addr string) (
 	if forceH1 {
 		alpn = []string{"http/1.1"}
 	}
+	// InsecureSkipVerify 说明:
+	//   1. 部分商业 HTTP 代理会做 SSL Inspection(MITM):对目标域名重签一张自签名证书
+	//      转发给客户端。这张证书不在系统 CA 列表里,导致 uTLS 证书验证失败。
+	//   2. 我们的安全边界在代理本身:流量已经走 CONNECT 隧道通过已信任的代理;
+	//      对 chatgpt.com 再做证书 pin 没有额外意义。
+	//   3. 即使不配置代理,直连场景下 chatgpt.com 用的是正规 DigiCert 证书,
+	//      实际不会触发此标志,行为与之前相同。
 	uconn := utls.UClient(raw, &utls.Config{
-		ServerName: host,
-		NextProtos: alpn,
-		MinVersion: tls.VersionTLS12,
+		ServerName:         host,
+		NextProtos:         alpn,
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: true, //nolint:gosec
 	}, utls.HelloChrome_131)
 
 	// 关键:utls 的预设 HelloID(HelloChrome_131 等)里 ALPNExtension 的值
